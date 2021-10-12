@@ -9,8 +9,12 @@ from gensim.utils import simple_preprocess
 from nltk.stem.porter import PorterStemmer
 
 def readfile(file):
+    try:
         with codecs.open(file, "r", "utf-8") as f: 
+            print(file, 'successfull read.')
             return f.read()
+    except Exception:
+        print(file, 'unsuccessfull read.')
 
 def preProcess(fileContent, excludeWords=None):
 
@@ -49,6 +53,7 @@ def preProcess(fileContent, excludeWords=None):
             return list(map(expression, wordLists))
 
     paragraphs = partitionParagraphs(fileContent)
+    print(len(fileContent))
     noHeaderFooter = removeParagraphsContainginWord(paragraphs, excludeWords)
     tokenized = tokenize(noHeaderFooter)
     noPunctuation = removePunctuation(tokenized)
@@ -79,35 +84,23 @@ def buildDict(stopWords, proccessedDocument):
     return bagOfWords, dictionary
 
 
+def tfIdf(corpus):
+    tfidf_model = TfidfModel(corpus)
+    tfidf_corpus  = tfidf_model[corpus]
+    tfidf_similarity_matrix = MatrixSimilarity(tfidf_corpus)
 
-def retrieval(corpus, dictionary, method=0):
-    '''
-    params:
-        method: 0=TFIDF (default), 1=LSI
-    '''
-
-    def tfIdf(corpus):
-        tfidf_model = TfidfModel(corpus)
-        tfidf_corpus  = tfidf_model[corpus]
-        tfidf_similarity_matrix = MatrixSimilarity(tfidf_corpus)
-
-        return tfidf_similarity_matrix
+    return tfidf_similarity_matrix
 
 
-    def lsi(corpus):
-        tfidf_model = TfidfModel(corpus)
-        tfidf_corpus  = tfidf_model[corpus]
-        lsi_model = LsiModel(tfidf_corpus, id2word=dictionary, num_topics=100)
-        lsi_corpus = lsi_model[corpus]
-        lsi_similarity_matrix = MatrixSimilarity(lsi_corpus)
+def lsi(corpus, dictionary):
+    tfidf_model = TfidfModel(corpus)
+    tfidf_corpus  = tfidf_model[corpus]
+    lsi_model = LsiModel(tfidf_corpus, id2word=dictionary, num_topics=100)
+    lsi_corpus = lsi_model[corpus]
+    lsi_similarity_matrix = MatrixSimilarity(lsi_corpus)
 
-        return lsi_similarity_matrix
+    return lsi_similarity_matrix
 
-    if method == 0:
-        return tfIdf()
-
-    elif method == 1:
-        return lsi()
 
 
 def proccessQuery(query):
@@ -121,7 +114,7 @@ def proccessQuery(query):
 
     return bagOfWords, dictionary
 
-def gettfidfmodel(BOW):
+def getTfidfmodel(BOW):
     return TfidfModel(BOW)
 
 
@@ -148,18 +141,19 @@ def printTop3Documents(tfidf_index, tfidf_query):
 
 
 # Pre Process Collection
-proccessedDocument, paragraphs = preProcess(readfile("./../pg3300.txt"), 'Gutenberg')
-documentBOW, documentDictionary = buildDict(readfile('./../stopWords.txt').split(','), proccessedDocument)
+proccessedDocument, paragraphs = preProcess(readfile("../pg3300.txt"), excludeWords='Gutenberg')
+documentBOW, documentDictionary = buildDict(readfile('../stopWords.txt').split(','), proccessedDocument)
 
 # Pre Process query
 queryBOW, queryDictionary = proccessQuery("How taxes influence Economics?")
 
-printOccurences(queryBOW, queryDictionary)
-printtfidfWeights(queryBOW, queryDictionary)
-tfidf = TfidfModel(corpus)
+# printOccurences(documentBOW, documentDictionary)
+# printOccurences(queryBOW, queryDictionary)
+# printtfidfWeights(queryBOW, queryDictionary)
 
-tfidf_index = retrieval(documentBOW, documentDictionary, method=0)
-printTop3Documents(tfidf_index)
+queryTfidModel = getTfidfmodel(queryBOW)
+
+# tfidf_index = tfIdf(documentBOW)
 
 
 # matrix_sim = MatrixSimilarity(tfidf_index)
