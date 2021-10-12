@@ -1,9 +1,11 @@
 import random; random.seed(123)
 import codecs
 import string
+import numpy as np
 from gensim.corpora import Dictionary
 from gensim.models import TfidfModel, LsiModel
 from gensim.similarities import MatrixSimilarity
+from gensim.utils import simple_preprocess
 from nltk.stem.porter import PorterStemmer
 
 def readfile(file):
@@ -22,7 +24,7 @@ def preProcess(fileContent, excludeWords=None):
             return listsOfText
 
     def tokenize(listsOfText):
-        return list(map(lambda x: x.split(), listsOfText))
+        return [simple_preprocess(doc) for doc in listsOfText]
 
     def removePunctuation(wordLists):
         '''
@@ -68,7 +70,7 @@ def buildDict(stopWords, proccessedDocument):
         return ids
 
     def getBOW(dictionary):
-        return list(map(lambda word: dictionary.doc2bow(word), proccessedDocument))
+        return [dictionary.doc2bow(doc, allow_update=True) for doc in proccessedDocument]
 
     dictionary = Dictionary(proccessedDocument)
     dictionary.filter_tokens(stopWordIds(dictionary))
@@ -78,21 +80,25 @@ def buildDict(stopWords, proccessedDocument):
 
 
 
-def retrieval(bagOfWords, dictionary, method=0):
+def retrieval(corpus, dictionary, method=0):
+    '''
+    params:
+        method: 0=TFIDF (default), 1=LSI
+    '''
 
-    def tfIdf():
-        tfidf_model = TfidfModel(bagOfWords)
-        tfidf_corpus  = tfidf_model[bagOfWords]
+    def tfIdf(corpus):
+        tfidf_model = TfidfModel(corpus)
+        tfidf_corpus  = tfidf_model[corpus]
         tfidf_similarity_matrix = MatrixSimilarity(tfidf_corpus)
 
         return tfidf_similarity_matrix
 
 
-    def lsi():
-        tfidf_model = TfidfModel(bagOfWords)
-        tfidf_corpus  = tfidf_model[bagOfWords]
+    def lsi(corpus):
+        tfidf_model = TfidfModel(corpus)
+        tfidf_corpus  = tfidf_model[corpus]
         lsi_model = LsiModel(tfidf_corpus, id2word=dictionary, num_topics=100)
-        lsi_corpus = lsi_model[bagOfWords]
+        lsi_corpus = lsi_model[corpus]
         lsi_similarity_matrix = MatrixSimilarity(lsi_corpus)
 
         return lsi_similarity_matrix
@@ -115,39 +121,55 @@ def proccessQuery(query):
 
     return bagOfWords, dictionary
 
+def gettfidfmodel(BOW):
+    return TfidfModel(BOW)
 
 
+def printOccurences(BOW, dictionary):
+    for word in BOW:
+        print([[dictionary[id], freq] for id, freq in word])
+
+def printtfidfWeights(corpus, dictionary):
+    tfidf = TfidfModel(corpus)
+
+    for doc in tfidf[corpus]:
+        print([[dictionary[id], round(freq,2)] for id, freq in doc])
+
+def printTop3Documents(tfidf_index, tfidf_query):
+    for tfidf_index, similarity in sorted(enumerate(tfidf_index[tfidf_query]), key=lambda kv: -kv[1])[:3]:
+        paragraph = paragraphs[tfidf_index].split("\n")
+        number = tfidf_index + 1
+        print("[paragraph: " + str(number) + "]")
+        for i in range(5):
+            print(paragraph[i])
+            if (i+1) == len(paragraph):
+                break
+        print("\n")
 
 
-
-stopWords = readfile('./../stopWords.txt').split(',')
+# Pre Process Collection
 proccessedDocument, paragraphs = preProcess(readfile("./../pg3300.txt"), 'Gutenberg')
-documentBOW, documentDictionary = buildDict(stopWords, proccessedDocument)
+documentBOW, documentDictionary = buildDict(readfile('./../stopWords.txt').split(','), proccessedDocument)
 
-matrix = retrieval(documentBOW, documentDictionary, method=0)
+# Pre Process query
+queryBOW, queryDictionary = proccessQuery("How taxes influence Economics?")
 
+printOccurences(queryBOW, queryDictionary)
+printtfidfWeights(queryBOW, queryDictionary)
+tfidf = TfidfModel(corpus)
 
-queryBOW, queryDictionary = proccessQuery("What is the function of money?")
-
-tfidf_model = TfidfModel(documentBOW)
-
-tfidf_index = tfidf_model[queryBOW]
-print(tfidf_index)
-
-for word in tfidf_index:
-    word_index = word[0]
-    word_weight = word[1]
-    print("index", word_index, "| word:", queryDictionary.get(word_index, word_weight), "| weight:", word_weight)
+tfidf_index = retrieval(documentBOW, documentDictionary, method=0)
+printTop3Documents(tfidf_index)
 
 
-matrix_sim = MatrixSimilarity(tfidf_index)
-doc2sim = enumerate(matrix_sim[tfidf_index])
-top_results = sorted(doc2sim, key=lambda x: x[1], reverse=True)[:3]
-# printing top 3 most relevant documents
-for result in top_results:
-    doc = paragraphs[result[0]]
-    doc = doc.split('\n')
-    print("\n[Document %d]" % result[0])
-    # printing only 5 lines of the document
-    for line in range(5):
-        print(doc[line])
+# matrix_sim = MatrixSimilarity(tfidf_index)
+# doc2sim = enumerate(matrix_sim[tfidf_index])
+# top_results = sorted(doc2sim, key=lambda x: x[1], reverse=True)[:3]
+# # printing top 3 most relevant documents
+# for result in top_results:
+#     doc = paragraphs[result[0]]
+#     doc = doc.split('\n')
+#     print("\n[Document %d]" % result[0])
+#     # printing only 5 lines of the document
+#     for line in range(5):
+#         print(doc[line])
