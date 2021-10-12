@@ -1,4 +1,3 @@
-import random; random.seed(123)
 import codecs
 import string
 import numpy as np
@@ -8,6 +7,10 @@ from gensim.similarities import MatrixSimilarity
 from gensim.utils import simple_preprocess
 from nltk.stem.porter import PorterStemmer
 
+# 1.0.
+import random; random.seed(123)
+
+# 1.1
 def readfile(file):
     try:
         with codecs.open(file, "r", "utf-8") as f: 
@@ -16,54 +19,113 @@ def readfile(file):
     except Exception:
         print(file, 'unsuccessfull read.')
 
-def preProcess(fileContent, excludeWords=None):
+# 1.2 - 1.6
+def preProcess(filcontent, excludeWords=None):
+    """Pre-proccesseses a document, filtering, tokenizing, punctuationremoval, whitespace removal, and stemming.
 
-    def partitionParagraphs(text):
-        return text.split('\r\n\r\n')
+    Args:
+        filcontent ([string]): String to be preProcessed
+        excludeWords ([string], optional): String to sensor. Defaults to None.
 
-    def removeParagraphsContainginWord(listsOfText, word):
+    Returns:
+        [list]: 2d list of proccessed words
+        [list]: A list of filtered paragraphs
+    """    
+
+    print('Pre-processing started, please wait...')
+
+    # 1.2
+    def partitionParagraphs(filcontent): # Input String
+        """Splits a string into a list of paragraphs.
+
+        Args:
+            filcontent ([string]): string to split
+
+        Returns:
+            [list]: list of paragraphs
+        """        
+        return filcontent.split('\r\n\r\n')
+
+    # 1.3
+    def removeDocsContainginWord(stringList, word):
+        """Removes paragraphs containing a certain word.
+
+        Args:
+            stringList (list): list of paragraphs to filter
+            word ([list]): word to filter by
+
+        Returns:
+            [list]: list of filtered paragraphs
+        """        
         if word != None:
-            return list(filter(lambda x: word.lower() not in x.lower(), listsOfText))
+            return list(filter(lambda x: word.lower() not in x.lower(), stringList))
         else:
-            return listsOfText
+            return stringList
 
-    def tokenize(listsOfText):
-        return [simple_preprocess(doc) for doc in listsOfText]
+    # 1.4
+    def tokenize(stringList):
+        """Tokneizes a list of paragraphs, removing words < 2 and deaccents words
 
-    def removePunctuation(wordLists):
-        '''
-        Removes punctuation and whitespace from a list of words, or a list of list of words.
-        '''
+        Args:
+            stringList ([list]): list to tokenize
+
+        Returns:
+            [list]: 2d list, each containing a paragraph
+        """        
+        return simple_preprocess(stringList, deacc=True, min_len=2)
+
+    # 1.5
+    def removePunctuation(doc):
+        """Removed punctuation and whitespace from a paragraph
+
+        Args:
+            doc ([list]): list containing a string to remove punctuation and whitespaces.
+
+        Returns:
+            [list]: 2d list, each containing a paragraph with no punctuation or whitespace.
+        """        
         expression = lambda x: x.translate(str.maketrans('', '', string.punctuation + '\n\r\t' ))
-        if all(isinstance(x, list) for x in wordLists): # Check if all elements in the 'wordLists' param is of type list (i.e. 2d list)
-            return list(list(map(expression, par)) for par in wordLists)
-        else:
-            return list(map(expression, wordLists))
+        return list(map(expression, doc))
 
+    # 1.6
+    def stemmer(docList):
+        """Iterates through a 2d list, stemming all words
 
-    def stemmer(wordLists):
-        '''
-        Stems words in a list of words, or a list of list of words.
-        '''
+        Args:
+            docList ([list]): 2d list of strings to be stemmed
+
+        Returns:
+            [type]: 2d list of stemmed words
+        """        
         stemmer = PorterStemmer()
-        expression = lambda word: stemmer.stem(word.lower())
-        if all(isinstance(word, list) for word in wordLists): # Check if all elements in the 'wordLists' param is of type list (i.e. 2d list)
-            return list(list(map(expression, par)) for par in wordLists)
+        expression = lambda word: stemmer.stem(word)
+        if all(isinstance(word, list) for word in docList): # Check if all elements in the 'wordLists' param is of type list (i.e. 2d list)
+            return list(list(map(expression, par)) for par in docList)
         else:
-            return list(map(expression, wordLists))
+            return list(map(expression, docList))
 
-    paragraphs = partitionParagraphs(fileContent)
-    print(len(fileContent))
-    noHeaderFooter = removeParagraphsContainginWord(paragraphs, excludeWords)
-    tokenized = tokenize(noHeaderFooter)
-    noPunctuation = removePunctuation(tokenized)
-    stemmd = stemmer(noPunctuation)
+    stringList = partitionParagraphs(filcontent)
+    stringListFiltered = removeDocsContainginWord(stringList, excludeWords)
+    docList = [tokenize(filteredString) for filteredString in stringListFiltered]
+    docListNoPunctuation = [removePunctuation(doc) for doc in docList]
+    docListStemmed = stemmer(docListNoPunctuation)
+    print('Pre-processing completed')
+    print()
+    
+    return docListStemmed, stringListFiltered
 
-    return stemmd, paragraphs
+# 2.1 & 2.2
+def buildDict(proccessedDocument, stopWords):
+    """Removes stopwords and builds a dictionary for a collection
 
-
-
-def buildDict(stopWords, proccessedDocument):
+    Args:
+        proccessedDocument ([list]): 2d list of pre-processed documents
+        stopWords ([list]): list of stopwords
+    
+    Returns:
+        [list]: A bagOfWords containing touples for word indexes, and the number of occurences.
+        [corpora.dictionary]: A dictionary containing the words and indexes for words in the collection
+    """    
 
     def stopWordIds(dictionary):
         ids = []
@@ -74,96 +136,203 @@ def buildDict(stopWords, proccessedDocument):
                 pass
         return ids
 
-    def getBOW(dictionary):
-        return [dictionary.doc2bow(doc, allow_update=True) for doc in proccessedDocument]
-
     dictionary = Dictionary(proccessedDocument)
     dictionary.filter_tokens(stopWordIds(dictionary))
-    bagOfWords = getBOW(dictionary)
+    bagOfWords = [dictionary.doc2bow(doc) for doc in proccessedDocument]
 
     return bagOfWords, dictionary
 
+# 3.1 - 3.4
+def getTfidfModel(corpus):
+    return TfidfModel(corpus)
 
-def tfIdf(corpus):
-    tfidf_model = TfidfModel(corpus)
-    tfidf_corpus  = tfidf_model[corpus]
-    tfidf_similarity_matrix = MatrixSimilarity(tfidf_corpus)
+def getTfidfMatrix(corpus):
+    tfidfModel = TfidfModel(corpus)
+    tfidfCorpus = tfidfModel[corpus]
+    return MatrixSimilarity(tfidfCorpus)
 
-    return tfidf_similarity_matrix
+def getLsiModel(corpus, dictionary):
+    tfidfModel = TfidfModel(corpus)
+    tfidfCorpus = tfidfModel[corpus]
+    return LsiModel(tfidfCorpus, id2word=dictionary, num_topics=100)
 
+def getLsiMatrix(corpus, dictionary):
+    lsiModel = getLsiModel(corpus, dictionary)
+    lsiCorpus = lsiModel[corpus]
+    return MatrixSimilarity(lsiCorpus)
 
-def lsi(corpus, dictionary):
-    tfidf_model = TfidfModel(corpus)
-    tfidf_corpus  = tfidf_model[corpus]
-    lsi_model = LsiModel(tfidf_corpus, id2word=dictionary, num_topics=100)
-    lsi_corpus = lsi_model[corpus]
-    lsi_similarity_matrix = MatrixSimilarity(lsi_corpus)
+# 3.5
+def printfirst3LsiTopics():
+    lsiDocModel = getLsiModel(documentCorpus, dictionary)
+    
+    print("\n[3.5 - First 3 Lsi Topics]")
+    first3LsiTopics = lsiDocModel.show_topics(3)
+    print(first3LsiTopics)
+    '''
+    [(0, '0.146*"labour" + 0.139*"price" + 0.127*"produc" + 0.126*"employ" + 0.122*"tax" + 0.121*"countri" + 0.121*"capit" + 0.118*"trade" + 0.118*"hi" + 0.114*"land"'), 
+    (1, '0.233*"silver" + -0.230*"rent" + -0.215*"labour" + 0.207*"gold" + -0.194*"land" + -0.176*"employ" + -0.176*"profit" + -0.175*"capit" + -0.174*"stock" + 0.167*"coin"'), 
+    (2, '0.358*"price" + -0.216*"trade" + 0.197*"labour" + 0.196*"silver" + 0.192*"quantiti" + -0.178*"coloni" + 0.148*"rent" + 0.144*"valu" + 0.130*"commod" + -0.128*"foreign"')]
+    '''
 
-    return lsi_similarity_matrix
+# 4.1
+def proccessQuery(query, dictionary):
+    """Pre-proccesseses a query, filtering, tokenizing, punctuationremoval, whitespace removal, and stemming.
 
+    Args:
+        filcontent ([string]): Query to be preProcessed
 
+    Returns:
+        [list]: A bagOfWords containing touples for word indexes, and the number of occurences.
+    """ 
 
-def proccessQuery(query):
+    proccessedQuery, QueryParagraphs = preProcess(query)
+    queryBOW = dictionary.doc2bow(proccessedQuery[0])
+    return queryBOW
 
-    def getBOW(dictionary):
-        return list(map(lambda word: dictionary.doc2bow(word), preProccessedQuery))
+# 4.2
+def printTfIdfWeights():
+    tfidfDocModel = getTfidfModel(documentCorpus)
+    tfidf_index = tfidfDocModel[queryCorpus]
 
-    preProccessedQuery, paragraphs = preProcess(query)
-    dictionary = Dictionary(preProccessedQuery)
-    bagOfWords = getBOW(dictionary)
+    print("\n[4.2 - TF_IDF Weights]")
+    # printing TF-DF weights of query
+    for word in tfidf_index:
+        word_index = word[0]
+        word_weight = word[1]
+        print("index", word_index, "| word:", dictionary.get(word_index, word_weight), "| weight:", word_weight)
+    print('----------------------------------------------------------------------------------')
 
-    return bagOfWords, dictionary
+    
+    '''
+    index 224 | word: influenc | weight: 0.5167629963231175
+    index 1578 | word: tax | weight: 0.25689531599662474
+    index 2676 | word: econom | weight: 0.8166766815883432
+    '''
 
-def getTfidfmodel(BOW):
-    return TfidfModel(BOW)
+# 4.3
+def printTop3RelevantDocuments():
+    tfidfDocModel = getTfidfModel(documentCorpus)
+    tfidfDocMatrix = getTfidfMatrix(documentCorpus)
+    tfidf_index = tfidfDocModel[queryCorpus]
 
+    print(f"\n[4.3 - Top 3 Relevant Documents for query: '{q}']", end="")
+    doc2sim = enumerate(tfidfDocMatrix[tfidf_index])
+    topResults = sorted(doc2sim, key=lambda x: x[1], reverse=True)[:3]
+    for result in topResults:
+        print(f'\n[paragraph {result[0]}]')
+        doc = documentParagraphs[result[0]]
+        doc = doc.split('\n')
+        for line in range(5):
+            if line < len(doc):
+                print(doc[line])
+            if line + 1 < len(doc) and line == 4:
+                print('. . .')
+    print('----------------------------------------------------------------------------------')
+    
+    '''
+    [paragraph 395]
+    As men, like all other animals, naturally multiply in proportion to the
+    means of their subsistence, food is always more or less in demand. It
+    can always purchase or command a greater or smaller quantity of labour,
+    and somebody can always be found who is willing to do something in order
+    to obtain it. The quantity of labour, indeed, which it can purchase,
+    . . .
 
-def printOccurences(BOW, dictionary):
-    for word in BOW:
-        print([[dictionary[id], freq] for id, freq in word])
+    [paragraph 2052]
+    Capitation Taxes.
 
-def printtfidfWeights(corpus, dictionary):
-    tfidf = TfidfModel(corpus)
+    [paragraph 2062]
+    The impossibility of taxing the people, in proportion to their revenue,
+    by any capitation, seems to have given occasion to the invention of
+    taxes upon consumable commodities. The state not knowing how to tax,
+    directly and proportionably, the revenue of its subjects, endeavours to
+    tax it indirectly by taxing their expense, which, it is supposed, will,
+    . . .
+    '''
 
-    for doc in tfidf[corpus]:
-        print([[dictionary[id], round(freq,2)] for id, freq in doc])
+# 4.4.1
+def printTop3WeightedTopics():
+    lsiDocModel = getLsiModel(documentCorpus, dictionary)
 
-def printTop3Documents(tfidf_index, tfidf_query):
-    for tfidf_index, similarity in sorted(enumerate(tfidf_index[tfidf_query]), key=lambda kv: -kv[1])[:3]:
-        paragraph = paragraphs[tfidf_index].split("\n")
-        number = tfidf_index + 1
-        print("[paragraph: " + str(number) + "]")
-        for i in range(5):
-            print(paragraph[i])
-            if (i+1) == len(paragraph):
-                break
-        print("\n")
+    print("\n[4.4.1 - Top 3 Topics with the most Significant Weights]", end="")
+    lsiQuery = lsiDocModel[queryCorpus]
+    topics = sorted(lsiQuery, key=lambda kv: -abs(kv[1]))[:3]
+    for topic in enumerate(topics):
+        t = topic[1][0]
+        print("\n[Topic %d]" % t)
+        print(lsiDocModel.show_topics()[t])
+    print('----------------------------------------------------------------------------------')
 
+    '''
+    [Topic 3]
+    (3, '-0.504*"tax" + -0.235*"rent" + 0.167*"trade" + 0.165*"employ" + -0.162*"upon" + 0.162*"labour" + 0.161*"capit" + 0.137*"quantiti" + -0.136*"hous" + 0.127*"foreign"')
 
-# Pre Process Collection
-proccessedDocument, paragraphs = preProcess(readfile("../pg3300.txt"), excludeWords='Gutenberg')
-documentBOW, documentDictionary = buildDict(readfile('../stopWords.txt').split(','), proccessedDocument)
+    [Topic 5]
+    (5, '-0.362*"tax" + -0.243*"capit" + -0.169*"foreign" + -0.142*"consumpt" + 0.131*"hi" + -0.129*"gold" + -0.128*"trade" + -0.115*"export" + -0.112*"annual" + -0.111*"duti"')
 
-# Pre Process query
-queryBOW, queryDictionary = proccessQuery("How taxes influence Economics?")
+    [Topic 8]
+    (8, '0.317*"tax" + 0.214*"coloni" + -0.194*"bank" + 0.172*"labour" + 0.169*"wage" + -0.166*"rent" + -0.165*"land" + -0.161*"bounti" + -0.155*"export" + -0.154*"corn"')
+    '''
+    
+# 4.4.2
+def printTop3RelevantParagraphs():
+    lsiDocModel = getLsiModel(documentCorpus, dictionary)
+    lsifDocMatrix = getLsiMatrix(documentCorpus, dictionary)
+    lsiQuery = lsiDocModel[queryCorpus]
 
-# printOccurences(documentBOW, documentDictionary)
-# printOccurences(queryBOW, queryDictionary)
-# printtfidfWeights(queryBOW, queryDictionary)
+    print("\n[4.4.2 - Top 3 Most Relevant Paragraphs]", end="")
+    lsi_doc2sim = enumerate(lsifDocMatrix[lsiQuery])
+    lsiDocuments = sorted(lsi_doc2sim, key=lambda kv: -abs(kv[1]))[:3]
+    for paragraph in lsiDocuments:
+        doc = documentParagraphs[paragraph[0]]
+        doc = doc.split('\n')
+        print(f"\n[Document {paragraph[0]}]")
+        for line in range(5):
+            if line < len(doc):
+                print(doc[line])
+            if line + 1 < len(doc) and line == 4:
+                print('. . .')
+    print('----------------------------------------------------------------------------------')
+    
+    
+    '''
+    [Document 907]
+    Whether the merchant whose capital exports the surplus produce of any
+    society, be a native or a foreigner, is of very little importance. If he
+    is a foreigner, the number of their productive labourers is necessarily
+    less than if he had been a native, by one man only; and the value of
+    their annual produce, by the profits of that one man. The sailors or
+    . . .
 
-queryTfidModel = getTfidfmodel(queryBOW)
+    [Document 908]
+    It is of more consequence that the capital of the manufacturer should
+    reside within the country. It necessarily puts into motion a greater
+    quantity of productive labour, and adds a greater value to the annual
+    produce of the land and labour of the society. It may, however, be
+    very useful to the country, though it should not reside within it. The
+    . . .
 
-# tfidf_index = tfIdf(documentBOW)
+    [Document 919]
+    The foreign goods for home consumption may sometimes be purchased, not
+    with the produce of domestic industry but with some other foreign goods.
+    These last, however, must have been purchased, either immediately with
+    the produce of domestic industry, or with something else that had been
+    purchased with it; for, the case of war and conquest excepted, foreign
+    . . .
+    '''
 
+# Document colletion
+proccessedDocument, documentParagraphs = preProcess(readfile("../pg3300_bb.txt"), excludeWords='Gutenberg')
+documentCorpus, dictionary = buildDict(proccessedDocument, readfile('../stopWords.txt').split(','))
 
-# matrix_sim = MatrixSimilarity(tfidf_index)
-# doc2sim = enumerate(matrix_sim[tfidf_index])
-# top_results = sorted(doc2sim, key=lambda x: x[1], reverse=True)[:3]
-# # printing top 3 most relevant documents
-# for result in top_results:
-#     doc = paragraphs[result[0]]
-#     doc = doc.split('\n')
-#     print("\n[Document %d]" % result[0])
-#     # printing only 5 lines of the document
-#     for line in range(5):
-#         print(doc[line])
+# Queries
+q1 = "How taxes influence Economics?"
+q2 = "What is the function of money?"
+q = q1 # query to be used
+queryCorpus = proccessQuery(q, dictionary)
+
+printfirst3LsiTopics()
+printTfIdfWeights()
+printTop3RelevantDocuments()
+printTop3WeightedTopics()
+printTop3RelevantParagraphs()
